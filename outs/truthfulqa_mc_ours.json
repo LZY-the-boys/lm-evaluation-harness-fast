@@ -1,0 +1,25 @@
+{
+  "results": {
+    "truthfulqa_mc": {
+      "mc1": 0.3402692778457772,
+      "mc1_stderr": 0.01658630490176256,
+      "mc2": 0.48017083138404915,
+      "mc2_stderr": 0.01553869581542383
+    }
+  },
+  "versions": {
+    "truthfulqa_mc": 1
+  },
+  "config": {
+    "model": "hf-causal",
+    "model_args": "pretrained=/data/outs/openchat13b/ep_4,dtype=bfloat16",
+    "num_fewshot": 0,
+    "batch_size": "24",
+    "batch_sizes": [],
+    "device": null,
+    "no_cache": false,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "description_dict": {}
+  }
+}
