@@ -117,7 +117,6 @@ class LM(abc.ABC):
     def set_cache_hook(self, cache_hook):
         self.cache_hook = cache_hook
 
-
 class BaseLM(LM):
     def __init__(self):
         super().__init__()
@@ -294,6 +293,11 @@ class BaseLM(LM):
             self.batch_sizes[sched] = self._detect_batch_size(reordered_requests, pos)
             print(f"Determined largest batch size: {self.batch_sizes[sched]}")
             return self.batch_sizes[sched]
+
+        # from accelerate import Accelerator
+        # accelerator  = Accelerator()
+        # # partion across each gpu
+        # with accelerator.split_between_processes(reordered_requests,) as reordered_requests_each_gpu:
 
         for chunk in utils.chunks(
             tqdm(reordered_requests, disable=disable_tqdm),

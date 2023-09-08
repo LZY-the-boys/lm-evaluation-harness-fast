@@ -60,7 +60,7 @@ from . import xwinograd
 from . import pawsx
 from . import xnli
 from . import mgsm
-
+from . import ceval
 ########################################
 # Translation tasks
 ########################################
@@ -325,6 +325,7 @@ TASK_REGISTRY = {
     **pawsx.construct_tasks(),
     **xnli.construct_tasks(),
     **mgsm.construct_tasks(),
+    **ceval.create_all_tasks(),
 }
 
 

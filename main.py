@@ -90,4 +90,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except:
+        import sys,pdb,bdb
+        type, value, tb = sys.exc_info()
+        if type == bdb.BdbQuit:
+            exit()
+        print(type,value)
+        pdb.post_mortem(tb)
+    
