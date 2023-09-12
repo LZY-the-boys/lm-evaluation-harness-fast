@@ -199,8 +199,7 @@ def evaluate(
 
     docs_for_decontamination = collections.defaultdict(list)
 
-    # get lists of each type of request
-    import pdb; pdb.set_trace()
+    # convert ALL data into one list
     for task_name, task in task_dict_items:
         versions[task_name] = task.VERSION
         # default to test doc, fall back to val doc if validation unavailable
@@ -219,7 +218,6 @@ def evaluate(
         rnd = random.Random()
         rnd.seed(42)
         rnd.shuffle(task_docs)
-        print(f"Task: {task_name}; number of docs: {len(task_docs)}")
 
         if write_out:
             prompt_details = []
@@ -248,11 +246,11 @@ def evaluate(
                 prompt_details.append({"doc_id": doc_id})
 
             # print the prompt for the first few documents
-            if doc_id < 1:
-                print(
-                    f"Task: {task_name}; document {doc_id}; context prompt (starting on next line):\n{ctx}\n(end of prompt on previous line)"
-                )
-                print("Requests:", reqs)
+            # if doc_id < 1:
+            #     print(
+            #         f"Task: {task_name}; document {doc_id}; context prompt (starting on next line):\n{ctx}\n(end of prompt on previous line)"
+            #     )
+            #     print("Requests:", reqs)
 
             if not isinstance(reqs, (list, tuple)):
                 reqs = [reqs]
@@ -289,7 +287,8 @@ def evaluate(
         #       solution. we could also implement some kind of auto-grouping here;
         #       they should end up next to each other.
 
-        print("Running", reqtype, "requests")
+        print(">>> Running", getattr(lm, reqtype), "requests")
+        # call base.LM.loglikehood
         resps = getattr(lm, reqtype)([req.args for req in reqs])
         resps = [
             x if req.index is None else x[req.index] for x, req in zip(resps, reqs)
@@ -380,23 +379,49 @@ def evaluate(
     return {"results": dict(results), "versions": dict(versions)}
 
 
-def make_table(result_dict):
+def make_table(result_dict, output_path):
     """Generate table of results."""
-    from pytablewriter import MarkdownTableWriter, LatexTableWriter
+    from pytablewriter import MarkdownTableWriter, LatexTableWriter, ExcelXlsxTableWriter
+    import pandas as pd
+    import json,os
+
+    # json
+    dumped = json.dumps(result_dict, indent=2)
+    os.makedirs(os.path.dirname(output_path + '.json'), exist_ok=True)
+    with open(output_path + '.json', "w") as f:
+        f.write(dumped)
 
     md_writer = MarkdownTableWriter()
     latex_writer = LatexTableWriter()
-    md_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
-    latex_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
-
+    
+    # csv, xlsx
+    columns =  ["Task", "Version", "Metrics", "Value", "Stderr"]
     values = []
-
     for k, dic in result_dict["results"].items():
         version = result_dict["versions"][k]
         for m, v in dic.items():
             if m.endswith("_stderr"):
                 continue
+            values.append([k, version, m, "%.4f" % v])
+            if m + "_stderr" in dic:
+                se = dic[m + "_stderr"]
+                values[-1].append("%.4f" % se)
+            else:
+                values[-1].append("")
+    df = pd.DataFrame(values,columns=columns)
+    df.to_csv(f'{output_path}.csv')
+    print(f'>>> result in {output_path}.csv')
+    # df.to_excel(f'{output_path}.xlsx')
 
+    # md, latex
+    md_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
+    latex_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
+    values = []
+    for k, dic in result_dict["results"].items():
+        version = result_dict["versions"][k]
+        for m, v in dic.items():
+            if m.endswith("_stderr"):
+                continue
             if m + "_stderr" in dic:
                 se = dic[m + "_stderr"]
                 values.append([k, version, m, "%.4f" % v, "±", "%.4f" % se])
@@ -407,6 +432,9 @@ def make_table(result_dict):
     md_writer.value_matrix = values
     latex_writer.value_matrix = values
 
+    # xlsx_writer = ExcelXlsxTableWriter()
+    # xlsx_writer.value_matrix = values
+    # xlsx_writer.dumps(f'{output_path}.xlsx')
     # todo: make latex table look good
     # print(latex_writer.dumps())
 
