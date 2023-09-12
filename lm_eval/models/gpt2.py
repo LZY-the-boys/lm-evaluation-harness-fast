@@ -3,6 +3,35 @@ import transformers
 from typing import Optional, Union
 from lm_eval.base import BaseLM
 from accelerate import Accelerator, find_executable_batch_size, DistributedType
+import multiprocess
+from tqdm import tqdm
+
+self_tokenizer=None
+self_eot_token_id=None
+def _tokenize_fn(request):
+
+    def self_tok_encode(string):
+        return self_tokenizer.encode(string, add_special_tokens=False)
+
+    def self_encode_pair(context, continuation):
+        n_spaces = len(context) - len(context.rstrip())
+        if n_spaces > 0:
+            continuation = context[-n_spaces:] + continuation
+            context = context[:-n_spaces]
+        whole_enc = self_tok_encode(context + continuation)
+        context_enc = self_tok_encode(context)
+        context_enc_len = len(context_enc)
+        continuation_enc = whole_enc[context_enc_len:]
+        return context_enc, continuation_enc
+
+    context, continuation = request
+    if context == "":
+        # end of text as context
+        context_enc, continuation_enc = [self_eot_token_id], self_tok_encode(continuation)
+    else:
+        context_enc, continuation_enc = self_encode_pair(context, continuation)
+    
+    return ((context, continuation), context_enc, continuation_enc)
 
 def _get_dtype(
     dtype: Union[str, torch.dtype]
@@ -197,6 +226,26 @@ class HFLM(BaseLM):
             generation_kwargs['pad_token_id'] = eos_token_id # setting eos_token_id as pad token
         return self.gpt2.generate(context, **generation_kwargs)
 
+    # multiple process 注意这里是需要保持顺序的
+    def loglikelihood(self, requests):
+
+        global self_eot_token_id, self_tokenizer
+        self_eot_token_id, self_tokenizer = self.eot_token_id, self.tokenizer
+        
+        process_num = 20
+        # default multiprocessing start method in Python is "fork," 
+        # which clones the current process, including its CUDA context, lead to error
+        # global eot_token_id, tokenizer, add_special_tokens
+        # eot_token_id, tokenizer, add_special_tokens = self.eot_token_id, self.tokenizer, self.add_special_tokens
+        with multiprocess.Pool(process_num) as pool:
+            new_reqs = list(tqdm(
+                # chunksize=100 
+                # pool.imap_unordered(_tokenize_fn, requests),  # 不保持顺序
+                pool.imap(_tokenize_fn, requests), # 保持顺序
+                total=len(requests), 
+                desc=f'Tokenize MAP({process_num})'
+            ))
+        return self._loglikelihood_tokens(new_reqs)
 
 # for backwards compatibility
 GPT2LM = HFLM

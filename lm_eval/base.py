@@ -209,7 +209,7 @@ class BaseLM(LM):
     def loglikelihood(self, requests):
         new_reqs = []
         # ALL task data are merged into one list
-        for context, continuation in requests:
+        for context, continuation in tqdm(requests, desc='tokenize'):
             if context == "":
                 # end of text as context
                 context_enc, continuation_enc = [self.eot_token_id], self.tok_encode(continuation)
@@ -219,7 +219,7 @@ class BaseLM(LM):
             new_reqs.append(((context, continuation), context_enc, continuation_enc))
 
         return self._loglikelihood_tokens(new_reqs)
-
+    
     def loglikelihood_rolling(self, requests):
         # TODO: Implement caching once we've confirmed the perplexity implementation
 
