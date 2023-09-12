@@ -2,7 +2,7 @@ import torch
 import transformers
 from typing import Optional, Union
 from lm_eval.base import BaseLM
-
+from accelerate import Accelerator, find_executable_batch_size, DistributedType
 
 def _get_dtype(
     dtype: Union[str, torch.dtype]
@@ -15,6 +15,30 @@ def _get_dtype(
         _torch_dtype = dtype
     return _torch_dtype
 
+
+def _get_accelerate_args(
+    device_map_option: Optional[str] = "auto",
+    max_memory_per_gpu: Optional[Union[int, str]] = None,
+    max_cpu_memory: Optional[Union[int, str]] = None,
+    offload_folder: Optional[str] = "./offload",
+) -> dict:
+    """Returns the kwargs needed to apply `accelerate` in `AutoModel.from_pretrained`."""
+    max_memory = {}
+    if max_memory_per_gpu is not None:
+        max_memory_per_gpu_map = {
+            device_idx: max_memory_per_gpu
+            for device_idx in range(torch.cuda.device_count())
+        }
+        max_memory.update(max_memory_per_gpu_map)
+    if max_cpu_memory is not None:
+        max_memory["cpu"] = max_cpu_memory
+
+    args = {}
+    if max_memory:
+        args["max_memory"] = max_memory
+    args["device_map"] = device_map_option
+    args["offload_folder"] = offload_folder
+    return args
 
 class HFLM(BaseLM):
 
@@ -33,6 +57,7 @@ class HFLM(BaseLM):
         load_in_8bit: Optional[bool] = False,
         trust_remote_code: Optional[bool] = False,
         dtype: Optional[Union[str, torch.dtype]]="auto",
+        tensor_parallel=False, # tensor parallel
     ):
         super().__init__()
 
@@ -40,24 +65,35 @@ class HFLM(BaseLM):
         assert isinstance(pretrained, str)
         assert isinstance(batch_size, (int, str))
 
-        device_list = set(
-            ["cuda", "cpu"] + [f"cuda:{i}" for i in range(torch.cuda.device_count())]
-        )
-        if device and device in device_list:
-            self._device = torch.device(device)
-            print(f"Using device '{device}'")
-        else:
-            print("Device not specified")
-            print(f"Cuda Available? {torch.cuda.is_available()}")
-            self._device = (
-                torch.device("cuda")
-                if torch.cuda.is_available()
-                else torch.device("cpu")
+        gpus = torch.cuda.device_count()
+        accelerator = Accelerator()
+        model_kwargs = {}
+
+        self.rank = 0
+        self.world_size = 1
+        data_parallel = False
+        self._device = torch.device(f"cuda:0")
+        if not (tensor_parallel or accelerator.num_processes > 1):
+            # single gpu
+            model_kwargs = {'device_map': {'':0}}
+        elif gpus > 1:
+            assert not (accelerator.num_processes > 1 and tensor_parallel), (
+                    "Attempted to use both a HF Accelerate `device_map` and to launch via `accelerate launch`. If this is the case, please either remove `parallelize=True` from --model_args or launch outside of the Accelerate launcher."
+                )
+            assert not gpus > accelerator.num_processes, (
+                "set CUDA_VISIBLE_DEVICES"
             )
 
-        # TODO: update this to be less of a hack once subfolder is fixed in HF
-        revision = revision + ("/" + subfolder if subfolder is not None else "")
+            # multi gpu
+            if tensor_parallel:
+                # tensor parallel
+                model_kwargs = {'device_map':'auto'}
+            else:
+                data_parallel = True
+                model_kwargs = {'device_map': {'':accelerator.local_process_index}}
 
+        revision = revision + ("/" + subfolder if subfolder is not None else "")
+        # fix tokenize speed:
         config = transformers.AutoConfig.from_pretrained(
             pretrained,
         )
@@ -72,18 +108,13 @@ class HFLM(BaseLM):
             revision=revision,
             torch_dtype=_get_dtype(dtype),
             trust_remote_code=trust_remote_code,
+            **model_kwargs,
         ).eval()
-        if not load_in_8bit:
-            try:
-                self.gpt2.to(self.device)
-            except:
-                print("Failed to place model onto specified device. This may be because the model is quantized via `bitsandbytes`. If the desired GPU is being used, this message is safe to ignore.")
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
             pretrained if tokenizer is None else tokenizer,
             revision=revision,
             trust_remote_code=trust_remote_code,
         )
-
         self.vocab_size = self.tokenizer.vocab_size
 
         # setup for automatic batch size detection
@@ -93,6 +124,20 @@ class HFLM(BaseLM):
             self.batch_size_per_gpu = int(batch_size)
 
         self._max_length = max_length
+
+        if data_parallel:
+            assert accelerator.distributed_type in [
+                DistributedType.FSDP,
+                DistributedType.MULTI_GPU,
+            ], "Unsupported distributed type provided. Only DDP and FSDP are supported."
+            if accelerator.distributed_type == DistributedType.FSDP:
+                self.gpt2 = accelerator.prepare(self.gpt2)
+            else:
+                self.gpt2 = accelerator.prepare_model(self.gpt2, evaluation_mode=True)
+            self._device = torch.device(f"cuda:{accelerator.local_process_index}")
+            self.accelerator = accelerator
+            self.rank = self.accelerator.local_process_index
+            self.world_size = self.accelerator.num_processes
 
     @property
     def eot_token_id(self):

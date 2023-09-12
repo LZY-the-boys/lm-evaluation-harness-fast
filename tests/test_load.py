@@ -32,3 +32,16 @@ model = transformers.LlamaForCausalLM.from_pretrained(
     device_map={'': 0},
     torch_dtype=torch.bfloat16,
 )
+
+# 4.
+# model = transformers.LlamaForCausalLM.from_pretrained(
+#     '/data/outs/llama2-13b-sharegpt4-orca-platypus/ep_4',
+#     device_map={'': 'cuda:0'},
+#     torch_dtype=torch.bfloat16,
+# )
+# model = transformers.LlamaForCausalLM.from_pretrained(
+#     '/data/outs/llama2-13b-sharegpt4-orca-platypus/ep_4',
+#     device_map={'': 'cuda'},
+#     torch_dtype=torch.bfloat16,
+# )
+# import pdb; pdb.set_trace()
