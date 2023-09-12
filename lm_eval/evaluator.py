@@ -77,13 +77,14 @@ def simple_evaluate(
         lm = model
 
     if not no_cache:
+        # 保存sqlite的db文件
         lm = lm_eval.base.CachingLM(
             lm,
-            "lm_cache/"
+            ("lm_cache/"
             + (model if isinstance(model, str) else model.model.config._name_or_path)
             + "_"
             + model_args.replace("=", "-").replace(",", "_").replace("/", "-")
-            + ".db",
+            + ".db"),
         )
 
     task_dict = lm_eval.tasks.get_task_dict(tasks)
