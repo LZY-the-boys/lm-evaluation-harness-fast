@@ -196,6 +196,10 @@ class HuggingFaceAutoLM(BaseLM):
             trust_remote_code=trust_remote_code,
             revision=revision + ("/" + subfolder if subfolder is not None else ""),
         )
+        if isinstance(self._config, transformers.LlamaConfig):
+            # llama load by automodel is very slow 
+            self.AUTO_MODEL_CLASS = transformers.LlamaForCausalLM
+            self.AUTO_TOKENIZER_CLASS = transformers.LlamaTokenizer
 
         self._add_special_tokens = add_special_tokens
         self.tokenizer = self._create_auto_tokenizer(
@@ -205,6 +209,7 @@ class HuggingFaceAutoLM(BaseLM):
             tokenizer=tokenizer,
         )
         self.tokenizer.model_max_length = self.max_length
+        print('>>> load tokenizer')
 
         model_kwargs = {}
         if use_accelerate:
@@ -228,6 +233,7 @@ class HuggingFaceAutoLM(BaseLM):
             bnb_4bit_compute_dtype=bnb_4bit_compute_dtype,
             **model_kwargs,
         )
+        print('load model')
         # note: peft_path can be different than pretrained model path
         if peft is not None:
             self.model = self._create_auto_model_peft(
@@ -237,6 +243,7 @@ class HuggingFaceAutoLM(BaseLM):
                 subfolder=subfolder,
                 load_in_4bit=load_in_4bit,
             )
+            print('load peft')
         self.model.eval()
         torch.set_grad_enabled(False)
 
@@ -279,7 +286,8 @@ class HuggingFaceAutoLM(BaseLM):
                 model_kwargs["load_in_4bit"] = load_in_4bit
                 if load_in_4bit:
                     model_kwargs["bnb_4bit_quant_type"] = bnb_4bit_quant_type
-                    model_kwargs["bnb_4bit_compute_dtype"] = getattr(torch, bnb_4bit_compute_dtype)
+                    model_kwargs["bnb_4bit_compute_dtype"] = getattr(torch, bnb_4bit_compute_dtype)           
+
             model = self.AUTO_MODEL_CLASS.from_pretrained(
                 pretrained,
                 revision=revision + ("/" + subfolder if subfolder is not None else ""),
@@ -346,6 +354,7 @@ class HuggingFaceAutoLM(BaseLM):
         TODO: Remove these conditionals once HuggingFace supports a way to
         check whether or not an arbitrary model was trained with special tokens.
         """
+        # ?
         if self._add_special_tokens is not None:
             return self._add_special_tokens
         elif self.AUTO_MODEL_CLASS is transformers.AutoModelForCausalLM:
@@ -481,6 +490,45 @@ class HuggingFaceAutoLM(BaseLM):
                 results.append(response)
         return reorder.get_original(results)
 
+    def loglikelihood(self, requests):
+        # base lm cannot work
+        import multiprocess
+        process_num = 12
+        # default multiprocessing start method in Python is "fork," 
+        # which clones the current process, including its CUDA context, lead to error
+        global eot_token_id, tokenizer, add_special_tokens
+        eot_token_id, tokenizer, add_special_tokens = self.eot_token_id, self.tokenizer, self.add_special_tokens
+        with multiprocess.Pool(process_num) as pool:
+            new_reqs = list(tqdm(
+                pool.imap_unordered(tokenize_map_fn, requests), # chunksize=100 
+                total=len(requests), 
+                desc=f'Tokenize MAP({process_num})'
+            ))
+
+        return self._loglikelihood_tokens(new_reqs)
+
+eot_token_id=None
+tokenizer=None
+add_special_tokens=None
+def tokenize_map_fn(request):
+
+    def tok_encode(string):
+        return tokenizer.encode(string, add_special_tokens=add_special_tokens)
+
+    context, continuation = request
+    if context == "":
+        # end of text as context
+        context_enc, continuation_enc = [self.eot_token_id], tok_encode(continuation)
+    else:
+        n_spaces = len(context) - len(context.rstrip())
+        if n_spaces > 0:
+            continuation = context[-n_spaces:] + continuation
+            context = context[:-n_spaces]
+        whole_enc = tok_encode(context + continuation)
+        context_enc = tok_encode(context)
+        context_enc_len = len(context_enc)
+        continuation_enc = whole_enc[context_enc_len:]
+    return ((context, continuation), context_enc, continuation_enc)
 
 class AutoCausalLM(HuggingFaceAutoLM):
     """Causal language modeling.
@@ -545,7 +593,6 @@ class AutoCausalLM(HuggingFaceAutoLM):
         return utils.select_continuation_from_batch_left_padding(
             generations, max_context_size=inputs["input_ids"].size(1)
         )
-
 
 class AutoSeq2SeqLM(HuggingFaceAutoLM):
     """Seq2Seq language modeling.

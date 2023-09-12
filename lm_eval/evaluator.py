@@ -6,8 +6,9 @@ import lm_eval.metrics
 import lm_eval.models
 import lm_eval.tasks
 import lm_eval.base
-from lm_eval.utils import positional_deprecated, run_task_tests
-
+from lm_eval.utils import positional_deprecated, run_task_tests, is_rank0
+import torch
+import os
 
 @positional_deprecated
 def simple_evaluate(
@@ -65,6 +66,11 @@ def simple_evaluate(
     np.random.seed(1234)
 
     assert tasks != [], "No tasks specified"
+    task_dict = lm_eval.tasks.get_task_dict(tasks)
+    task_statistics = lm_eval.tasks.get_task_statistics(task_dict)
+
+    if is_rank0():
+        print(task_statistics)
 
     if isinstance(model, str):
         if model_args is None:
@@ -77,16 +83,15 @@ def simple_evaluate(
         lm = model
 
     if not no_cache:
+        # 保存sqlite的db文件
         lm = lm_eval.base.CachingLM(
             lm,
-            "lm_cache/"
+            ("lm_cache/"
             + (model if isinstance(model, str) else model.model.config._name_or_path)
             + "_"
             + model_args.replace("=", "-").replace(",", "_").replace("/", "-")
-            + ".db",
+            + ".db"),
         )
-
-    task_dict = lm_eval.tasks.get_task_dict(tasks)
 
     if check_integrity:
         run_task_tests(task_list=tasks)
@@ -171,6 +176,7 @@ def evaluate(
 
     decontaminate = decontamination_ngrams_path is not None
 
+    # dict to tuple
     task_dict_items = [
         (name, task)
         for name, task in task_dict.items()
@@ -196,7 +202,7 @@ def evaluate(
 
     docs_for_decontamination = collections.defaultdict(list)
 
-    # get lists of each type of request
+    # convert ALL data into one list
     for task_name, task in task_dict_items:
         versions[task_name] = task.VERSION
         # default to test doc, fall back to val doc if validation unavailable
@@ -215,7 +221,6 @@ def evaluate(
         rnd = random.Random()
         rnd.seed(42)
         rnd.shuffle(task_docs)
-        print(f"Task: {task_name}; number of docs: {len(task_docs)}")
 
         if write_out:
             prompt_details = []
@@ -228,7 +233,10 @@ def evaluate(
         if limit is not None:
             limit = int(len(task_docs) * limit) if limit < 1.0 else int(limit)
 
-        for doc_id, doc in enumerate(itertools.islice(task_docs, 0, limit)):
+        # build prompt & construct requests
+        # itertools.islice split across all rank for **every** task
+        # accelerate.split_across ?
+        for doc_id, doc in enumerate(itertools.islice(task_docs, lm.rank, limit, lm.world_size)):
             if decontaminate and task.should_decontaminate():
                 docs_for_decontamination[(task_name, task_set)].append(
                     task.doc_to_decontamination_query(doc)
@@ -244,11 +252,11 @@ def evaluate(
                 prompt_details.append({"doc_id": doc_id})
 
             # print the prompt for the first few documents
-            if doc_id < 1:
-                print(
-                    f"Task: {task_name}; document {doc_id}; context prompt (starting on next line):\n{ctx}\n(end of prompt on previous line)"
-                )
-                print("Requests:", reqs)
+            # if doc_id < 1:
+            #     print(
+            #         f"Task: {task_name}; document {doc_id}; context prompt (starting on next line):\n{ctx}\n(end of prompt on previous line)"
+            #     )
+            #     print("Requests:", reqs)
 
             if not isinstance(reqs, (list, tuple)):
                 reqs = [reqs]
@@ -280,12 +288,10 @@ def evaluate(
 
     # execute each type of request
     for reqtype, reqs in requests.items():
-        # TODO: right now, this code runs multiple separate LM requests for multiple Requests differing
-        #       only in index. We could implement some kind of caching, but that would be more of a band-aid
-        #       solution. we could also implement some kind of auto-grouping here;
-        #       they should end up next to each other.
 
-        print("Running", reqtype, "requests")
+        if is_rank0():
+            print(">>> Running", getattr(lm, reqtype), "requests")
+        # call base.LM.loglikehood
         resps = getattr(lm, reqtype)([req.args for req in reqs])
         resps = [
             x if req.index is None else x[req.index] for x, req in zip(resps, reqs)
@@ -305,6 +311,9 @@ def evaluate(
                     ]
                 else:
                     write_out_info[task_name][doc_id]["truth"] = task.doc_to_target(doc)
+
+    if lm.world_size > 1:
+        lm.accelerator.wait_for_everyone()
 
     vals = collections.defaultdict(list)
 
@@ -328,71 +337,150 @@ def evaluate(
                 if doc_id not in overlaps[task_name]:
                     vals[(task_name, metric + decontaminate_suffix)].append(value)
 
-    # aggregate results
-    for (task_name, metric), items in vals.items():
-        task = task_dict[task_name]
-        real_metric = metric  # key when looking up the metric with task.aggregation
-        if metric.endswith(decontaminate_suffix):
-            real_metric = metric.replace(
-                decontaminate_suffix, ""
-            )  # decontaminated still uses the same metric
-        results[task_name][metric] = task.aggregation()[real_metric](items)
+    
+    if lm.world_size > 1:
 
-        # hotfix: bleu, chrf, ter seem to be really expensive to bootstrap
-        # so we run them less iterations. still looking for a cleaner way to do this
+        vals_torch = collections.defaultdict(list)
 
-        stderr = lm_eval.metrics.stderr_for_metric(
-            metric=task.aggregation()[real_metric],
-            bootstrap_iters=min(bootstrap_iters, 1000)
-            if metric in ["bleu", "chrf", "ter"]
-            else bootstrap_iters,
-        )
+        for (task_name, metric), items in vals.items():
+            numitem = 0
+            if type(items[0]) == tuple:
+                numitem = len(items[0])
 
-        if stderr is not None:
-            results[task_name][metric + "_stderr"] = stderr(items)
+            if isinstance(items[0], (str, list)):
+                # handle the string case
+                gathered_items = [None] * lm.accelerator.num_processes
+                torch.distributed.all_gather_object(gathered_items, items)
 
-    if write_out:
-        import json
-        import pathlib
+                gathered_item = list(itertools.chain.from_iterable(gathered_items))
+            else:
+                # distributed gather requires all ranks to have same dimensions
+                # so we pad out with float32 min value
+                pad_value = torch.finfo(torch.float32).min
+                metrics_tensor = torch.tensor(items, device=lm.device)
 
-        output_base_path = (
-            pathlib.Path(output_base_path)
-            if output_base_path is not None
-            else pathlib.Path(".")
-        )
-        try:
-            output_base_path.mkdir(parents=True, exist_ok=False)
-        except FileExistsError:
-            pass
+                original_dtype = metrics_tensor.dtype  # store original dtype
 
-        for task_name, _ in task_dict_items:
-            with open(
-                output_base_path.joinpath(f"{task_name}_write_out_info.json"),
-                "w",
-                encoding="utf8",
-            ) as fp:
-                json.dump(write_out_info[task_name], fp, indent=4, ensure_ascii=False)
+                # 长度可能不一样,需要pad成shape
+                torch_device_tensor = lm.accelerator.pad_across_processes(
+                    metrics_tensor.to(torch.float32), pad_index=pad_value
+                )
+                # shape' = gpus*shape
+                # [0],[1],[2],[3] => [0,1,2,3],[0,1,2,3],[0,1,2,3],[0,1,2,3]
+                # 顺序会变但是metrics不影响
+                gathered_item = lm.accelerator.gather(torch_device_tensor)
+                # 把pad value删了
+                if numitem > 0:
+                    gathered_filtered = gathered_item[gathered_item[:, 0] != pad_value]
+                else:
+                    gathered_filtered = gathered_item[gathered_item != pad_value]
+
+                gathered_item = (
+                    gathered_filtered.to(original_dtype).cpu().detach().numpy().tolist()
+                )
+                # reconvert if we were passed a tuple of values
+                if numitem > 0:
+                    gathered_item = [tuple(g) for g in gathered_item]
+            
+            if lm.rank == 0:
+                vals_torch[(task_name, metric)] = gathered_item
+
+        vals = vals_torch
+
+    if lm.rank == 0:
+        # aggregate results
+        for (task_name, metric), items in vals.items():
+            task = task_dict[task_name]
+            real_metric = metric  # key when looking up the metric with task.aggregation
+            if metric.endswith(decontaminate_suffix):
+                real_metric = metric.replace(
+                    decontaminate_suffix, ""
+                )  # decontaminated still uses the same metric
+
+            # task scores 
+            results[task_name][metric] = task.aggregation()[real_metric](items)
+
+            # hotfix: bleu, chrf, ter seem to be really expensive to bootstrap
+            # so we run them less iterations. still looking for a cleaner way to do this
+
+            stderr = lm_eval.metrics.stderr_for_metric(
+                metric=task.aggregation()[real_metric],
+                bootstrap_iters=min(bootstrap_iters, 1000)
+                if metric in ["bleu", "chrf", "ter"]
+                else bootstrap_iters,
+            )
+
+            if stderr is not None:
+                results[task_name][metric + "_stderr"] = stderr(items)
+
+        if write_out:
+            import json
+            import pathlib
+
+            output_base_path = (
+                pathlib.Path(output_base_path)
+                if output_base_path is not None
+                else pathlib.Path(".")
+            )
+            try:
+                output_base_path.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                pass
+
+            for task_name, _ in task_dict_items:
+                with open(
+                    output_base_path.joinpath(f"{task_name}_write_out_info.json"),
+                    "w",
+                    encoding="utf8",
+                ) as fp:
+                    json.dump(write_out_info[task_name], fp, indent=4, ensure_ascii=False)
 
     return {"results": dict(results), "versions": dict(versions)}
 
 
-def make_table(result_dict):
+def make_table(result_dict, output_path):
     """Generate table of results."""
-    from pytablewriter import MarkdownTableWriter, LatexTableWriter
+    from pytablewriter import MarkdownTableWriter, LatexTableWriter, ExcelXlsxTableWriter
+    import pandas as pd
+    import json,os
+
+    # json
+    dumped = json.dumps(result_dict, indent=2)
+    os.makedirs(os.path.dirname(output_path + '.json'), exist_ok=True)
+    with open(output_path + '.json', "w") as f:
+        f.write(dumped)
 
     md_writer = MarkdownTableWriter()
     latex_writer = LatexTableWriter()
-    md_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
-    latex_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
-
+    
+    # csv, xlsx
+    columns =  ["Task", "Version", "Metrics", "Value", "Stderr"]
     values = []
-
     for k, dic in result_dict["results"].items():
         version = result_dict["versions"][k]
         for m, v in dic.items():
             if m.endswith("_stderr"):
                 continue
+            values.append([k, version, m, "%.4f" % v])
+            if m + "_stderr" in dic:
+                se = dic[m + "_stderr"]
+                values[-1].append("%.4f" % se)
+            else:
+                values[-1].append("")
+    df = pd.DataFrame(values,columns=columns)
+    df.to_csv(f'{output_path}.csv')
+    print(f'>>> result in {output_path}.csv')
+    # df.to_excel(f'{output_path}.xlsx')
 
+    # md, latex
+    md_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
+    latex_writer.headers = ["Task", "Version", "Metric", "Value", "", "Stderr"]
+    values = []
+    for k, dic in result_dict["results"].items():
+        version = result_dict["versions"][k]
+        for m, v in dic.items():
+            if m.endswith("_stderr"):
+                continue
             if m + "_stderr" in dic:
                 se = dic[m + "_stderr"]
                 values.append([k, version, m, "%.4f" % v, "±", "%.4f" % se])
@@ -403,6 +491,9 @@ def make_table(result_dict):
     md_writer.value_matrix = values
     latex_writer.value_matrix = values
 
+    # xlsx_writer = ExcelXlsxTableWriter()
+    # xlsx_writer.value_matrix = values
+    # xlsx_writer.dumps(f'{output_path}.xlsx')
     # todo: make latex table look good
     # print(latex_writer.dumps())
 

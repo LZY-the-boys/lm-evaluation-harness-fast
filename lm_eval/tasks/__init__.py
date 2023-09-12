@@ -60,7 +60,7 @@ from . import xwinograd
 from . import pawsx
 from . import xnli
 from . import mgsm
-
+from . import ceval
 ########################################
 # Translation tasks
 ########################################
@@ -325,6 +325,7 @@ TASK_REGISTRY = {
     **pawsx.construct_tasks(),
     **xnli.construct_tasks(),
     **mgsm.construct_tasks(),
+    **ceval.create_all_tasks(),
 }
 
 
@@ -399,3 +400,22 @@ def get_task_dict(task_name_list: List[Union[str, lm_eval.base.Task]]):
     }
     assert set(task_name_dict.keys()).isdisjoint(set(task_name_from_object_dict.keys()))
     return {**task_name_dict, **task_name_from_object_dict}
+
+def get_task_statistics(task_dict):
+    # only use test or valid set
+    ans = {}
+    total = 0
+    for name, task in task_dict.items():
+        if task.has_test_docs():
+            task_doc_func = task.test_docs
+            task_set = "test"  # Required for caching in the decontamination
+        elif task.has_validation_docs():
+            task_set = "val"  # Required for caching in the decontamination
+            task_doc_func = task.validation_docs
+        else:
+            raise RuntimeError("Task has neither test_docs nor validation_docs")
+        task_docs = list(task_doc_func())
+        ans[name] = len(task_docs)
+        total += len(task_docs)
+    ans['total'] = total
+    return ans

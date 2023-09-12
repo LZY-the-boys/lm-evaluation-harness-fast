@@ -17,6 +17,8 @@ from omegaconf import OmegaConf
 class ExitCodeError(Exception):
     pass
 
+def is_rank0():
+    return int(os.environ.get('LOCAL_RANK','0'))==0
 
 def sh(x):
     if os.system(x):

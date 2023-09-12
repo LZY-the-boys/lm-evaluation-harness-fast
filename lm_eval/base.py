@@ -117,7 +117,6 @@ class LM(abc.ABC):
     def set_cache_hook(self, cache_hook):
         self.cache_hook = cache_hook
 
-
 class BaseLM(LM):
     def __init__(self):
         super().__init__()
@@ -209,7 +208,8 @@ class BaseLM(LM):
 
     def loglikelihood(self, requests):
         new_reqs = []
-        for context, continuation in requests:
+        # ALL task data are merged into one list
+        for context, continuation in tqdm(requests, desc='tokenize'):
             if context == "":
                 # end of text as context
                 context_enc, continuation_enc = [self.eot_token_id], self.tok_encode(continuation)
@@ -219,7 +219,7 @@ class BaseLM(LM):
             new_reqs.append(((context, continuation), context_enc, continuation_enc))
 
         return self._loglikelihood_tokens(new_reqs)
-
+    
     def loglikelihood_rolling(self, requests):
         # TODO: Implement caching once we've confirmed the perplexity implementation
 
@@ -294,6 +294,11 @@ class BaseLM(LM):
             self.batch_sizes[sched] = self._detect_batch_size(reordered_requests, pos)
             print(f"Determined largest batch size: {self.batch_sizes[sched]}")
             return self.batch_sizes[sched]
+
+        # from accelerate import Accelerator
+        # accelerator  = Accelerator()
+        # # partion across each gpu
+        # with accelerator.split_between_processes(reordered_requests,) as reordered_requests_each_gpu:
 
         for chunk in utils.chunks(
             tqdm(reordered_requests, disable=disable_tqdm),
