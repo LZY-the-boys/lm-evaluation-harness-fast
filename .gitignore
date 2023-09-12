@@ -3,3 +3,9 @@ env
 data/
 lm_cache
 .idea
+env
+outs
+tests
+openllmleaderboard
+lm_eval.egg-info
+__pycache__
