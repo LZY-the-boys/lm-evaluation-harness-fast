@@ -4,3 +4,4 @@ data/
 lm_cache
 .idea
 outs
+tests/testdata
