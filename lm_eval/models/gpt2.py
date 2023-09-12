@@ -58,10 +58,17 @@ class HFLM(BaseLM):
         # TODO: update this to be less of a hack once subfolder is fixed in HF
         revision = revision + ("/" + subfolder if subfolder is not None else "")
 
+        config = transformers.AutoConfig.from_pretrained(
+            pretrained,
+        )
+        if isinstance(config, transformers.LlamaConfig):
+            # transformers.AutoModelForCausalLM = transformers.LlamaForCausalLM
+            transformers.AutoTokenizer = transformers.LlamaTokenizer
+
         self.gpt2 = transformers.AutoModelForCausalLM.from_pretrained(
             pretrained,
             load_in_8bit=load_in_8bit,
-            low_cpu_mem_usage=low_cpu_mem_usage,
+            low_cpu_mem_usage=True, # loading speedup 
             revision=revision,
             torch_dtype=_get_dtype(dtype),
             trust_remote_code=trust_remote_code,
