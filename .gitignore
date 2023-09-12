@@ -4,4 +4,7 @@ data/
 lm_cache
 .idea
 outs
-tests/testdata
+tests
+openllmleaderboard
+lm_eval.egg-info
+__pycache__

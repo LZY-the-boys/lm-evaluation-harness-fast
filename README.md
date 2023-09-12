@@ -1,3 +1,69 @@
+# lm-evaluation-harness Speedup
+
+The `lm-evaluation-harness` is very good and adopted in hotest leaderboard: [huggingface openllmleaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), 
+but the [version](https://github.com/EleutherAI/lm-evaluation-harness/tree/b281b0921b636bc36ad05c0b0b0763bd6dd43463) huggingface used is very slow in terms of loading model,tokenize prompt and inference only on a single card.
+In my test, the lastest lm-evaluation-harness version (`bigrefactor` branch) cannot reproduce huggingface openllmleaderboard result.
+
+So I add speedup teniques totally based on [this version](https://github.com/EleutherAI/lm-evaluation-harness/tree/b281b0921b636bc36ad05c0b0b0763bd6dd43463).
+
+1. add `low_cpu_mem_usage` / `device_map`, which can speedup model loading vastly.
+2. convert `autotokenizer` to `llamatokenizer`, which can surely improve tokenize speed.
+3. add multiprocess tokenizer.
+4. add multigpu accelerater inference:
+   1. `tensor parallel`: 1 process, split model across multiple gpu.
+   2. `data parallel inference`: multiple process, split data across multiple gpu.
+
+For model like `OpenChat-v3.2`, we have results as follows and is the same as result of [this version](https://github.com/EleutherAI/lm-evaluation-harness/tree/b281b0921b636bc36ad05c0b0b0763bd6dd43463) on my machines, which is also very close to huggingface result.
+
+```json
+{
+  "results": {
+    "hendrycksTest-abstract_algebra": {
+      "acc": 0.33,
+      "acc_stderr": 0.04725815626252606,
+      "acc_norm": 0.33,
+      "acc_norm_stderr": 0.04725815626252606
+    },
+    "hendrycksTest-anatomy": {
+      "acc": 0.4666666666666667,
+      "acc_stderr": 0.043097329010363554,
+      "acc_norm": 0.4666666666666667,
+      "acc_norm_stderr": 0.043097329010363554
+    },
+    "hendrycksTest-astronomy": {
+      "acc": 0.5657894736842105,
+      "acc_stderr": 0.04033565667848319,
+      "acc_norm": 0.5657894736842105,
+      "acc_norm_stderr": 0.04033565667848319
+    },
+    "hendrycksTest-business_ethics": {
+      "acc": 0.54,
+      "acc_stderr": 0.05009082659620332,
+      "acc_norm": 0.54,
+      "acc_norm_stderr": 0.05009082659620332
+    }
+  },
+  "versions": {
+    "hendrycksTest-abstract_algebra": 1,
+    "hendrycksTest-anatomy": 1,
+    "hendrycksTest-astronomy": 1,
+    "hendrycksTest-business_ethics": 1
+  },
+  "config": {
+    "model": "hf-causal",
+    "model_args": "pretrained=openchat/openchat_v3.2,dtype=bfloat16",
+    "num_fewshot": 5,
+    "batch_size": "1",
+    "batch_sizes": [],
+    "device": null,
+    "no_cache": true,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "description_dict": {}
+  }
+}
+```
+
 # Language Model Evaluation Harness
 
 ## Notice to Users
