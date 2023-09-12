@@ -65,6 +65,9 @@ def simple_evaluate(
     np.random.seed(1234)
 
     assert tasks != [], "No tasks specified"
+    task_dict = lm_eval.tasks.get_task_dict(tasks)
+    task_statistics = lm_eval.tasks.get_task_statistics(task_dict)
+    print(task_statistics)
 
     if isinstance(model, str):
         if model_args is None:
@@ -86,8 +89,6 @@ def simple_evaluate(
             + model_args.replace("=", "-").replace(",", "_").replace("/", "-")
             + ".db"),
         )
-
-    task_dict = lm_eval.tasks.get_task_dict(tasks)
 
     if check_integrity:
         run_task_tests(task_list=tasks)
@@ -172,6 +173,7 @@ def evaluate(
 
     decontaminate = decontamination_ngrams_path is not None
 
+    # dict to tuple
     task_dict_items = [
         (name, task)
         for name, task in task_dict.items()
@@ -198,6 +200,7 @@ def evaluate(
     docs_for_decontamination = collections.defaultdict(list)
 
     # get lists of each type of request
+    import pdb; pdb.set_trace()
     for task_name, task in task_dict_items:
         versions[task_name] = task.VERSION
         # default to test doc, fall back to val doc if validation unavailable
