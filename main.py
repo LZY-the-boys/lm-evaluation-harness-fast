@@ -4,7 +4,6 @@ import logging
 import os
 
 from lm_eval import tasks, evaluator, utils
-import pdb_extension
 
 logging.getLogger("openai").setLevel(logging.WARNING)
 
