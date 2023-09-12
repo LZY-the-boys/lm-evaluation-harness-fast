@@ -4,9 +4,9 @@ import logging
 import os
 
 from lm_eval import tasks, evaluator, utils
+import pdb_extension
 
 logging.getLogger("openai").setLevel(logging.WARNING)
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -48,8 +48,8 @@ def main():
         task_names = tasks.ALL_TASKS
     else:
         task_names = utils.pattern_match(args.tasks.split(","), tasks.ALL_TASKS)
-
-    print(f"Selected Tasks: {task_names}")
+    if utils.is_rank0():
+        print(f">>> Selected Tasks: {task_names}")
 
     description_dict = {}
     if args.description_dict_path:
@@ -72,21 +72,13 @@ def main():
         write_out=args.write_out,
         output_base_path=args.output_base_path,
     )
-
-    dumped = json.dumps(results, indent=2)
-    print(dumped)
-
-    if args.output_path:
-        os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
-        with open(args.output_path, "w") as f:
-            f.write(dumped)
-
-    batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
-    print(
-        f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
-        f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}{f' ({batch_sizes})' if batch_sizes else ''}"
-    )
-    print(evaluator.make_table(results))
+    if utils.is_rank0():
+        batch_sizes = ",".join(map(str, results["config"]["batch_sizes"]))
+        print(
+            f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
+            f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}{f' ({batch_sizes})' if batch_sizes else ''}"
+        )
+        print(evaluator.make_table(results, args.output_path))
 
 
 if __name__ == "__main__":
@@ -98,5 +90,5 @@ if __name__ == "__main__":
         if type == bdb.BdbQuit:
             exit()
         print(type,value)
-        pdb.post_mortem(tb)
+        pdb.post_mmortem(tb)
     
