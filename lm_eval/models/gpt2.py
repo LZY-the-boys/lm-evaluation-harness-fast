@@ -5,6 +5,7 @@ from lm_eval.base import BaseLM
 from accelerate import Accelerator, find_executable_batch_size, DistributedType
 import multiprocess
 from tqdm import tqdm
+from transformers import GPTQConfig,BitsAndBytesConfig
 
 self_tokenizer=None
 self_eot_token_id=None
@@ -87,6 +88,8 @@ class HFLM(BaseLM):
         trust_remote_code: Optional[bool] = False,
         dtype: Optional[Union[str, torch.dtype]]="auto",
         tensor_parallel=False, # tensor parallel
+        peft: Optional[str] = None,
+        quantization_config = None,
     ):
         super().__init__()
 
@@ -130,6 +133,20 @@ class HFLM(BaseLM):
             # transformers.AutoModelForCausalLM = transformers.LlamaForCausalLM
             transformers.AutoTokenizer = transformers.LlamaTokenizer
 
+        if quantization_config:
+            # NOTICE: model.config.quantization_config > input quantization_config
+            if quantization_config['quant_method'] == 'gptq':
+                quantization_config = GPTQConfig.from_dict(quantization_config)
+            elif quantization_config['quant_method'] == 'bitsandbytes':
+                quantization_config['bnb_4bit_compute_dtype'] = _get_dtype(dtype)
+                if self.rank == 0:
+                    print(f'>>> set bnb_4bit_compute_dtype to {_get_dtype(dtype)}')
+                quantization_config = BitsAndBytesConfig.from_dict(quantization_config)  
+            else:
+                raise Exception('wrong quantization_config')      
+            model_kwargs.update({'quantization_config': quantization_config})
+
+        # support for auto_gptq
         self.gpt2 = transformers.AutoModelForCausalLM.from_pretrained(
             pretrained,
             load_in_8bit=load_in_8bit,
@@ -139,6 +156,14 @@ class HFLM(BaseLM):
             trust_remote_code=trust_remote_code,
             **model_kwargs,
         ).eval()
+        if self.rank == 0:
+            print(self.gpt2.config)
+
+        if peft:
+            self.gpt2 = PeftModel.from_pretrained(
+                self.gpt2, peft
+            )
+
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
             pretrained if tokenizer is None else tokenizer,
             revision=revision,

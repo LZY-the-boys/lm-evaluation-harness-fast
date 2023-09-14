@@ -58,6 +58,8 @@ def simple_parse_args_string(args_string):
     if not args_string:
         return {}
     arg_list = args_string.split(",")
+    # https://omegaconf.readthedocs.io/en/2.3_branch/usage.html#id14
+    # dot_list = ["a.aa.aaa=1", "a.aa.bbb=2", "a.bb.aaa=3", "a.bb.bbb=4"]
     args_dict = OmegaConf.to_object(OmegaConf.from_dotlist(arg_list))
     return args_dict
 
