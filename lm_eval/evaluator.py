@@ -14,6 +14,7 @@ import os
 def simple_evaluate(
     model,
     model_args=None,
+    quantization_config=None,
     tasks=[],
     num_fewshot=0,
     batch_size=None,
@@ -76,7 +77,7 @@ def simple_evaluate(
         if model_args is None:
             model_args = ""
         lm = lm_eval.models.get_model(model).create_from_arg_string(
-            model_args, {"batch_size": batch_size, "max_batch_size": max_batch_size, "device": device}
+            model_args, {"batch_size": batch_size, "max_batch_size": max_batch_size, "device": device, "quantization_config": quantization_config }
         )
     else:
         assert isinstance(model, lm_eval.base.LM)
