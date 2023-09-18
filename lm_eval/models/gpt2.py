@@ -5,6 +5,8 @@ from lm_eval.base import BaseLM
 from accelerate import Accelerator, find_executable_batch_size, DistributedType
 import multiprocess
 from tqdm import tqdm
+from transformers import GPTQConfig,BitsAndBytesConfig
+from peft import PeftModelForCausalLM
 
 self_tokenizer=None
 self_eot_token_id=None
@@ -44,31 +46,6 @@ def _get_dtype(
         _torch_dtype = dtype
     return _torch_dtype
 
-
-def _get_accelerate_args(
-    device_map_option: Optional[str] = "auto",
-    max_memory_per_gpu: Optional[Union[int, str]] = None,
-    max_cpu_memory: Optional[Union[int, str]] = None,
-    offload_folder: Optional[str] = "./offload",
-) -> dict:
-    """Returns the kwargs needed to apply `accelerate` in `AutoModel.from_pretrained`."""
-    max_memory = {}
-    if max_memory_per_gpu is not None:
-        max_memory_per_gpu_map = {
-            device_idx: max_memory_per_gpu
-            for device_idx in range(torch.cuda.device_count())
-        }
-        max_memory.update(max_memory_per_gpu_map)
-    if max_cpu_memory is not None:
-        max_memory["cpu"] = max_cpu_memory
-
-    args = {}
-    if max_memory:
-        args["max_memory"] = max_memory
-    args["device_map"] = device_map_option
-    args["offload_folder"] = offload_folder
-    return args
-
 class HFLM(BaseLM):
 
     _DEFAULT_MAX_LENGTH = 2048
@@ -83,10 +60,12 @@ class HFLM(BaseLM):
         tokenizer=None,
         batch_size=1,
         max_length=None,
-        load_in_8bit: Optional[bool] = False,
+        # load_in_8bit: Optional[bool] = False,
         trust_remote_code: Optional[bool] = False,
         dtype: Optional[Union[str, torch.dtype]]="auto",
         tensor_parallel=False, # tensor parallel
+        peft: Optional[str] = None,
+        quantization_config = None,
     ):
         super().__init__()
 
@@ -125,20 +104,42 @@ class HFLM(BaseLM):
         # fix tokenize speed:
         config = transformers.AutoConfig.from_pretrained(
             pretrained,
+            trust_remote_code=trust_remote_code,
         )
         if isinstance(config, transformers.LlamaConfig):
             # transformers.AutoModelForCausalLM = transformers.LlamaForCausalLM
             transformers.AutoTokenizer = transformers.LlamaTokenizer
 
+        if quantization_config:
+            # NOTICE: model.config.quantization_config > input quantization_config
+            if quantization_config['quant_method'] == 'gptq':
+                quantization_config = GPTQConfig.from_dict(quantization_config)
+            elif quantization_config['quant_method'] == 'bitsandbytes':
+                quantization_config['bnb_4bit_compute_dtype'] = _get_dtype(dtype)
+                if self.rank == 0:
+                    print(f'>>> set bnb_4bit_compute_dtype to {_get_dtype(dtype)}')
+                quantization_config = BitsAndBytesConfig.from_dict(quantization_config)  
+            else:
+                raise Exception('wrong quantization_config')      
+            model_kwargs.update({'quantization_config': quantization_config})
+
+        # support for auto_gptq
         self.gpt2 = transformers.AutoModelForCausalLM.from_pretrained(
             pretrained,
-            load_in_8bit=load_in_8bit,
             low_cpu_mem_usage=True, # loading speedup 
             revision=revision,
             torch_dtype=_get_dtype(dtype),
             trust_remote_code=trust_remote_code,
             **model_kwargs,
         ).eval()
+        if self.rank == 0:
+            print(self.gpt2.config)
+
+        if peft:
+            self.gpt2 = PeftModelForCausalLM.from_pretrained(
+                self.gpt2, peft
+            )
+
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
             pretrained if tokenizer is None else tokenizer,
             revision=revision,

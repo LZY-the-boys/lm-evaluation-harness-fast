@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument("--check_integrity", action="store_true")
     parser.add_argument("--write_out", action="store_true", default=False)
     parser.add_argument("--output_base_path", type=str, default=None)
+    parser.add_argument("--quantization_config", type=str, default=None)
 
     return parser.parse_args()
 
@@ -54,10 +55,15 @@ def main():
     if args.description_dict_path:
         with open(args.description_dict_path, "r") as f:
             description_dict = json.load(f)
+    
+    if args.quantization_config:
+        args.quantization_config = json.loads(args.quantization_config)
+        assert 'quant_method' in args.quantization_config
 
     results = evaluator.simple_evaluate(
         model=args.model,
         model_args=args.model_args,
+        quantization_config=args.quantization_config,
         tasks=task_names,
         num_fewshot=args.num_fewshot,
         batch_size=args.batch_size,

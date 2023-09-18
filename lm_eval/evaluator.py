@@ -14,6 +14,7 @@ import os
 def simple_evaluate(
     model,
     model_args=None,
+    quantization_config=None,
     tasks=[],
     num_fewshot=0,
     batch_size=None,
@@ -76,7 +77,7 @@ def simple_evaluate(
         if model_args is None:
             model_args = ""
         lm = lm_eval.models.get_model(model).create_from_arg_string(
-            model_args, {"batch_size": batch_size, "max_batch_size": max_batch_size, "device": device}
+            model_args, {"batch_size": batch_size, "max_batch_size": max_batch_size, "device": device, "quantization_config": quantization_config }
         )
     else:
         assert isinstance(model, lm_eval.base.LM)
@@ -337,7 +338,6 @@ def evaluate(
                 if doc_id not in overlaps[task_name]:
                     vals[(task_name, metric + decontaminate_suffix)].append(value)
 
-    
     if lm.world_size > 1:
 
         vals_torch = collections.defaultdict(list)
@@ -386,7 +386,6 @@ def evaluate(
                 vals_torch[(task_name, metric)] = gathered_item
 
         vals = vals_torch
-
     if lm.rank == 0:
         # aggregate results
         for (task_name, metric), items in vals.items():

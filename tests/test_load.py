@@ -27,11 +27,11 @@ import torch
 # )
 
 # 3. 速度貌似最快
-model = transformers.LlamaForCausalLM.from_pretrained(
-    '/data/outs/llama2-13b-sharegpt4-orca-platypus/ep_4',
-    device_map={'': 0},
-    torch_dtype=torch.bfloat16,
-)
+# model = transformers.LlamaForCausalLM.from_pretrained(
+#     '/data/outs/llama2-13b-sharegpt4-orca-platypus/ep_4',
+#     device_map={'': 0},
+#     torch_dtype=torch.bfloat16,
+# )
 
 # 4.
 # model = transformers.LlamaForCausalLM.from_pretrained(
@@ -44,4 +44,14 @@ model = transformers.LlamaForCausalLM.from_pretrained(
 #     device_map={'': 'cuda'},
 #     torch_dtype=torch.bfloat16,
 # )
+
+
+# 5. Loading GPTQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'
+# model = transformers.AutoModelForCausalLM.from_pretrained(
+#     '/data/models/Llama-2-70B-GPTQ',
+#     # device_map={'': 'cuda'},
+#     device_map='auto',
+#     torch_dtype=torch.float16,
+# )
 # import pdb; pdb.set_trace()
+
