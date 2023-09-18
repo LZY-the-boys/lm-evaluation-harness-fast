@@ -299,7 +299,6 @@ class BaseLM(LM):
         # accelerator  = Accelerator()
         # # partion across each gpu
         # with accelerator.split_between_processes(reordered_requests,) as reordered_requests_each_gpu:
-
         for chunk in utils.chunks(
             tqdm(reordered_requests, disable=disable_tqdm),
             n=self.batch_size if self.batch_size != "auto" else override_bs if override_bs is not None else 0,
@@ -384,7 +383,6 @@ class BaseLM(LM):
                 logits = torch.gather(logits, 2, cont_toks.unsqueeze(-1)).squeeze(
                     -1
                 )  # [1, seq]
-
                 # Answer: (log prob, is-exact-match)
                 answer = (float(logits.sum()), bool(max_equal))
 

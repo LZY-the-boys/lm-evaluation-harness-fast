@@ -338,7 +338,6 @@ def evaluate(
                 if doc_id not in overlaps[task_name]:
                     vals[(task_name, metric + decontaminate_suffix)].append(value)
 
-    
     if lm.world_size > 1:
 
         vals_torch = collections.defaultdict(list)
@@ -387,7 +386,6 @@ def evaluate(
                 vals_torch[(task_name, metric)] = gathered_item
 
         vals = vals_torch
-
     if lm.rank == 0:
         # aggregate results
         for (task_name, metric), items in vals.items():
