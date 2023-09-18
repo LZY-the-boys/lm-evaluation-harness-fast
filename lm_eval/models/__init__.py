@@ -4,10 +4,12 @@ from . import anthropic_llms
 from . import huggingface
 from . import textsynth
 from . import dummy
+from . import exllama
 
 MODEL_REGISTRY = {
     "hf": gpt2.HFLM,
     "hf-causal": gpt2.HFLM,
+    "exllama2": exllama.ExllamaLM,
     "hf-causal-experimental": huggingface.AutoCausalLM,
     "hf-seq2seq": huggingface.AutoSeq2SeqLM,
     "gpt2": gpt2.GPT2LM,

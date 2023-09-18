@@ -7,5 +7,6 @@ env
 outs
 tests
 openllmleaderboard
-lm_eval.egg-info
+*.egg-info
 __pycache__
+exllamav2
