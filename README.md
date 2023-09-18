@@ -13,6 +13,88 @@ So I add speedup teniques totally based on [this version](https://github.com/Ele
    1. `tensor parallel`: 1 process, split model across multiple gpu.
    2. `data parallel inference`: multiple process, split data across multiple gpu.
 
+I also add support for auto-gptq, bitsandbytes, peft and exllamav2 in lm-evaluation-harness !
+For example, The 70B [`LLama2-70B-chat-2.55bpw-h6-exl2`](https://huggingface.co/turboderp/LLama2-70B-chat-2.55bpw-h6-exl2) only need 24~25 VRAM to load. 
+
+The Usage for ordinary huggingface models: 
+```
+# if single gpu
+python main.py \
+    --model hf-causal \
+    --model_args pretrained=$MODEL_DIR,dtype="bfloat16",trust_remote_code=True \
+    --tasks hendrycksTest-abstract_algebra,hendrycksTest-anatomy,hendrycksTest-astronomy,hendrycksTest-business_ethics \
+    --num_fewshot=5 \
+    --no_cache \
+    --output_path $OUR_DIR/ref/mmlu \
+    --batch_size=2
+
+# if multiple gpu tensor_parallel
+python main.py \
+    --model hf-causal \
+    --model_args pretrained=$MODEL_DIR,dtype="bfloat16",trust_remote_code=True,tensor_parallel=True \
+    --tasks hendrycksTest-abstract_algebra,hendrycksTest-anatomy,hendrycksTest-astronomy,hendrycksTest-business_ethics \
+    --num_fewshot=5 \
+    --no_cache \
+    --output_path $OUR_DIR/ref/mmlu \
+    --batch_size=2
+
+# if multiple gpu data_parallel
+accelerate launch main.py \
+    --model hf-causal \
+    --model_args pretrained=$MODEL_DIR,dtype="bfloat16",trust_remote_code=True \
+    --tasks arc_challenge \
+    --num_fewshot=25 \
+    --output_path $OUR_DIR/ref/arc \
+    --no_cache \
+    --batch_size=4 
+```
+
+The Usage for huggingface gptq models/bitsandbytes models, only have to set `quantization_config`: 
+```
+accelerate launch main.py \
+    --model hf-causal \
+    --model_args pretrained=$MODEL_DIR,dtype="float16",max_length=1024 \
+    --quantization_config="{\"bits\": 4, \"disable_exllama\":false,\"quant_method\":\"gptq\",\"use_cuda_fp16\":false}" \
+    --tasks arc_challenge \
+    --num_fewshot=25 \
+    --output_path $OUR_DIR/ref/arc \
+    --no_cache \
+    --batch_size=1
+
+accelerate launch main.py \
+    --model hf-causal \
+    --model_args pretrained=$MODEL_DIR,dtype="bfloat16" \
+    --quantization_config="{\"load_in_8bit\":false,\"load_in_4bit\":true,\"bnb_4bit_use_double_quant\":true,\"bnb_4bit_quant_type\":\"nf4\",\"llm_int8_has_fp16_weight\":true,\"quant_method\":\"bitsandbytes\"}" \
+    --tasks hendrycksTest-abstract_algebra,hendrycksTest-anatomy,hendrycksTest-astronomy,hendrycksTest-business_ethics \
+    --num_fewshot=5 \
+    --no_cache \
+    --output_path $OUR_DIR/ref/mmlu \
+    --batch_size=1
+```
+
+The usage for exllamav2:
+```
+# for tensor_parallel: set the gpu_split, e.g. gpu_split="12;13" means load 12G of model split in gpu0 and 13G in gpu1.
+accelerate launch main.py \
+    --model exllama2 \
+    --model_args pretrained=$MODEL_DIR,dtype="bfloat16",gpu_split="12;13" \
+    --tasks arc_challenge \
+    --num_fewshot=25 \
+    --output_path $OUR_DIR/ref/arc \
+    --no_cache \
+    --batch_size=16
+
+# for data_parallel
+accelerate launch main.py \
+    --model exllama2 \
+    --model_args pretrained=$MODEL_DIR,dtype="bfloat16" \
+    --tasks arc_challenge \
+    --num_fewshot=25 \
+    --output_path $OUR_DIR/ref/arc \
+    --no_cache \
+    --batch_size=16
+```
+
 For model like `OpenChat-v3.2`, we have results as follows and is the same as result of [this version](https://github.com/EleutherAI/lm-evaluation-harness/tree/b281b0921b636bc36ad05c0b0b0763bd6dd43463) on my machines, which is also very close to huggingface result.
 
 ```json

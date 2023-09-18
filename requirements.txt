@@ -18,3 +18,4 @@ torch>=1.7
 tqdm-multiprocess
 zstandard
 accelerate>=0.17.1
+exllamav2 @ git+https://github.com/turboderp/exllamav2.git
