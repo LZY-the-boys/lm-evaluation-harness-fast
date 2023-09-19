@@ -95,56 +95,22 @@ accelerate launch main.py \
     --batch_size=16
 ```
 
-For model like `OpenChat-v3.2`, we have results as follows and is the same as result of [this version](https://github.com/EleutherAI/lm-evaluation-harness/tree/b281b0921b636bc36ad05c0b0b0763bd6dd43463) on my machines, which is also very close to huggingface result.
+For model of 70B in gptq, the `TheBloke/Llama-2-70B-GPTQ` performance is as follows:
+| bench                   | score    |
+| ----------------------- | -------- |
+| MMLU(acc)               | 0.6789 |
+| arc:challenge(acc_norm) | 0.6689 |
+| hellaswag(acc_norm)     | 0.8655 |
+| truthfulqa(mc2)         | 0.4524 |
 
-```json
-{
-  "results": {
-    "hendrycksTest-abstract_algebra": {
-      "acc": 0.33,
-      "acc_stderr": 0.04725815626252606,
-      "acc_norm": 0.33,
-      "acc_norm_stderr": 0.04725815626252606
-    },
-    "hendrycksTest-anatomy": {
-      "acc": 0.4666666666666667,
-      "acc_stderr": 0.043097329010363554,
-      "acc_norm": 0.4666666666666667,
-      "acc_norm_stderr": 0.043097329010363554
-    },
-    "hendrycksTest-astronomy": {
-      "acc": 0.5657894736842105,
-      "acc_stderr": 0.04033565667848319,
-      "acc_norm": 0.5657894736842105,
-      "acc_norm_stderr": 0.04033565667848319
-    },
-    "hendrycksTest-business_ethics": {
-      "acc": 0.54,
-      "acc_stderr": 0.05009082659620332,
-      "acc_norm": 0.54,
-      "acc_norm_stderr": 0.05009082659620332
-    }
-  },
-  "versions": {
-    "hendrycksTest-abstract_algebra": 1,
-    "hendrycksTest-anatomy": 1,
-    "hendrycksTest-astronomy": 1,
-    "hendrycksTest-business_ethics": 1
-  },
-  "config": {
-    "model": "hf-causal",
-    "model_args": "pretrained=openchat/openchat_v3.2,dtype=bfloat16",
-    "num_fewshot": 5,
-    "batch_size": "1",
-    "batch_sizes": [],
-    "device": null,
-    "no_cache": true,
-    "limit": null,
-    "bootstrap_iters": 100000,
-    "description_dict": {}
-  }
-}
-```
+For model of 70B in exllamav2: the performance of `LLama2-70B-chat-2.55bpw-h6-exl2` is as follows:
+
+| bench                   | score    |
+| ----------------------- | -------- |
+| MMLU(acc)               | 0.5526 |
+| arc:challenge(acc_norm) | 0.5922 |
+| hellaswag(acc_norm)     | 0.8126 |
+| truthfulqa(mc2)         | 0.4890 |
 
 # Language Model Evaluation Harness
 
