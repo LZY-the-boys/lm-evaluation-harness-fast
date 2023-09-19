@@ -88,15 +88,15 @@ class HFLM(BaseLM):
             assert not (accelerator.num_processes > 1 and tensor_parallel), (
                     "Attempted to use both a HF Accelerate `device_map` and to launch via `accelerate launch`. If this is the case, please either remove `parallelize=True` from --model_args or launch outside of the Accelerate launcher."
                 )
-            assert not gpus > accelerator.num_processes, (
-                "set CUDA_VISIBLE_DEVICES"
-            )
 
             # multi gpu
             if tensor_parallel:
                 # tensor parallel
                 model_kwargs = {'device_map':'auto'}
             else:
+                assert not gpus > accelerator.num_processes, (
+                    "set CUDA_VISIBLE_DEVICES; temporially not support gpus > num_processes"
+                )
                 data_parallel = True
                 model_kwargs = {'device_map': {'':accelerator.local_process_index}}
 
