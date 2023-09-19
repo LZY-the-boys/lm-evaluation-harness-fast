@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 import os
-
+import pdb_extension
 from lm_eval import tasks, evaluator, utils
 
 logging.getLogger("openai").setLevel(logging.WARNING)
