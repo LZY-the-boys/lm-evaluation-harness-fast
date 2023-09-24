@@ -66,6 +66,7 @@ class HFLM(BaseLM):
         tensor_parallel=False, # tensor parallel
         peft: Optional[str] = None,
         quantization_config = None,
+        flash_attention = False,
     ):
         super().__init__()
 
@@ -110,6 +111,10 @@ class HFLM(BaseLM):
             # transformers.AutoModelForCausalLM = transformers.LlamaForCausalLM
             transformers.AutoTokenizer = transformers.LlamaTokenizer
 
+            if flash_attention:
+                from flash_attn_patch import replace_llama_attn_with_flash_attn
+                replace_llama_attn_with_flash_attn(packed=False)
+
         if quantization_config:
             # NOTICE: model.config.quantization_config > input quantization_config
             if quantization_config['quant_method'] == 'gptq':
@@ -124,6 +129,7 @@ class HFLM(BaseLM):
             model_kwargs.update({'quantization_config': quantization_config})
 
         # support for auto_gptq
+        torch_dtype=_get_dtype(dtype)
         self.gpt2 = transformers.AutoModelForCausalLM.from_pretrained(
             pretrained,
             low_cpu_mem_usage=True, # loading speedup 
@@ -136,6 +142,15 @@ class HFLM(BaseLM):
             print(self.gpt2.config)
 
         if peft:
+            
+            if flash_attention:
+                for name, module in self.gpt2.named_modules():
+                    if "norm" in name:
+                        module.to(torch_dtype)
+                    if "lm_head" in name or "embed_tokens" in name:
+                        if hasattr(module, "weight"):
+                            module.to(torch_dtype)
+            
             self.gpt2 = PeftModelForCausalLM.from_pretrained(
                 self.gpt2, peft
             )
