@@ -66,6 +66,7 @@ class HFLM(BaseLM):
         tensor_parallel=False, # tensor parallel
         peft: Optional[str] = None,
         quantization_config = None,
+        flash_attention = False,
     ):
         super().__init__()
 
@@ -135,6 +136,7 @@ class HFLM(BaseLM):
             model_kwargs.update({'quantization_config': quantization_config})
 
         # support for auto_gptq
+        torch_dtype=_get_dtype(dtype)
         self.gpt2 = transformers.AutoModelForCausalLM.from_pretrained(
             pretrained,
             low_cpu_mem_usage=True, # loading speedup 
