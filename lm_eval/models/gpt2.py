@@ -100,6 +100,11 @@ class HFLM(BaseLM):
                 data_parallel = True
                 model_kwargs = {'device_map': {'':accelerator.local_process_index}}
 
+                self._device = torch.device(f"cuda:{accelerator.local_process_index}")
+                self.accelerator = accelerator
+                self.rank = self.accelerator.local_process_index
+                self.world_size = self.accelerator.num_processes
+
         revision = revision + ("/" + subfolder if subfolder is not None else "")
         # fix tokenize speed:
         config = transformers.AutoConfig.from_pretrained(
@@ -109,6 +114,12 @@ class HFLM(BaseLM):
         if isinstance(config, transformers.LlamaConfig):
             # transformers.AutoModelForCausalLM = transformers.LlamaForCausalLM
             transformers.AutoTokenizer = transformers.LlamaTokenizer
+
+            if flash_attention:
+                from lm_eval.models.flash_attn_patch import replace_llama_attn_with_flash_attn
+                replace_llama_attn_with_flash_attn(packed=False)
+                if self.rank == 0:
+                    print(f'>>> use flash_attention')
 
         if quantization_config:
             # NOTICE: model.config.quantization_config > input quantization_config
@@ -136,6 +147,15 @@ class HFLM(BaseLM):
             print(self.gpt2.config)
 
         if peft:
+            
+            if flash_attention:
+                for name, module in self.gpt2.named_modules():
+                    if "norm" in name:
+                        module.to(torch_dtype)
+                    if "lm_head" in name or "embed_tokens" in name:
+                        if hasattr(module, "weight"):
+                            module.to(torch_dtype)
+            
             self.gpt2 = PeftModelForCausalLM.from_pretrained(
                 self.gpt2, peft
             )
@@ -164,10 +184,6 @@ class HFLM(BaseLM):
                 self.gpt2 = accelerator.prepare(self.gpt2)
             else:
                 self.gpt2 = accelerator.prepare_model(self.gpt2, evaluation_mode=True)
-            self._device = torch.device(f"cuda:{accelerator.local_process_index}")
-            self.accelerator = accelerator
-            self.rank = self.accelerator.local_process_index
-            self.world_size = self.accelerator.num_processes
 
     @property
     def eot_token_id(self):
