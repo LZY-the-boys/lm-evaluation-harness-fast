@@ -97,12 +97,12 @@ accelerate launch main.py \
 ```
 
 For model of 70B in gptq, the `TheBloke/Llama-2-70B-GPTQ` performance is as follows:
-| bench                   | score    |
-| ----------------------- | -------- |
-| MMLU(acc)               | 0.6789 |
-| arc:challenge(acc_norm) | 0.6689 |
-| hellaswag(acc_norm)     | 0.8655 |
-| truthfulqa(mc2)         | 0.4524 |
+| bench                   | raw    | flash-attn    |
+| ----------------------- | -------- | -------- |
+| MMLU(acc)               | 0.6789 | 0.6798 |
+| arc:challenge(acc_norm) | 0.6689 | 0.6672 |
+| hellaswag(acc_norm)     | 0.8655 | 0.8659 |
+| truthfulqa(mc2)         | 0.4524 | 0.4524 |
 
 For model of 70B in exllamav2: the performance of `LLama2-70B-chat-2.55bpw-h6-exl2` is as follows:
 
