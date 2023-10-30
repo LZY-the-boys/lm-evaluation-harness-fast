@@ -77,3 +77,8 @@ class ARCEasy(MultipleChoiceTask):
 class ARCChallenge(ARCEasy):
     DATASET_PATH = "ai2_arc"
     DATASET_NAME = "ARC-Challenge"
+
+
+class ARCSmall(ARCEasy):
+    DATASET_PATH = "/home/ubuntu/fch/lora2LORA/small_arc_challenge_test.json"
+    DATASET_NAME = None

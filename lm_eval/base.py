@@ -510,13 +510,19 @@ class Task(abc.ABC):
             - `datasets.DownloadMode.FORCE_REDOWNLOAD`
                 Fresh download and fresh dataset.
         """
-        self.dataset = datasets.load_dataset(
-            path=self.DATASET_PATH,
-            name=self.DATASET_NAME,
-            data_dir=data_dir,
-            cache_dir=cache_dir,
-            download_mode=download_mode,
-        )
+        if self.DATASET_PATH.endswith('json'):
+            self.dataset = datasets.load_dataset("json", data_files=self.DATASET_PATH)
+            self.dataset['test'] = self.dataset['train']
+            self.dataset['validation'] = self.dataset['train']
+        else:
+            self.dataset = datasets.load_dataset(
+                path=self.DATASET_PATH,
+                name=self.DATASET_NAME,
+                data_dir=data_dir,
+                cache_dir=cache_dir,
+                download_mode=download_mode,
+                revision="d5e240dc14ebaa19af28076092a57a8222612fd5" if self.DATASET_PATH == 'cais/mmlu' else 'main'
+            )
 
     def should_decontaminate(self):
         """Whether this task supports decontamination against model training set."""
