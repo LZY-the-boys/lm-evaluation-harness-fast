@@ -80,5 +80,6 @@ class ARCChallenge(ARCEasy):
 
 
 class ARCSmall(ARCEasy):
-    DATASET_PATH = "/home/ubuntu/fch/lora2LORA/small_arc_challenge_test.json"
+    import os
+    DATASET_PATH = "/home/lzy/lora2LORA/dataset/small_arc_challenge_test.json"
     DATASET_NAME = None

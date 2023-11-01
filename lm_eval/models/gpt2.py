@@ -149,6 +149,8 @@ class HFLM(BaseLM):
             print(self.gpt2.config)
 
         if peft:
+            if self.rank == 0:
+                print('>>> load peft from', peft)
             
             if flash_attention:
                 for name, module in self.gpt2.named_modules():
