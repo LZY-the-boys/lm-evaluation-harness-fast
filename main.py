@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import pdb_extension
 
 from lm_eval import tasks, evaluator, utils
 
@@ -87,5 +88,14 @@ def main():
 
 
 if __name__ == "__main__":
+    # try:
     main()
+    # except:
+    #     import sys,pdb,bdb
+    #     type, value, tb = sys.exc_info()
+    #     if type == bdb.BdbQuit:
+    #         exit()
+    #     print(type,value)
+    #     pdb.post_mmortem(tb)
+    
     
