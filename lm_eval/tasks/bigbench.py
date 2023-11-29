@@ -236,3 +236,7 @@ def create_all_tasks():
         task_path = os.path.join(resources_dir, f"{task_name}.json")
         res[f"bigbench_{task_name}"] = create_task_from_path(task_path)
     return res
+
+if __name__ == "__main__":
+    res=create_all_tasks()
+    import pdb; pdb.set_trace()

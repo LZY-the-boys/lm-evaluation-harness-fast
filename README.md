@@ -12,6 +12,7 @@ So I add speedup teniques totally based on [this version](https://github.com/Ele
 4. add multigpu accelerater inference:
    1. `tensor parallel`: 1 process, split model across multiple gpu.
    2. `data parallel inference`: multiple process, split data across multiple gpu.
+5. add flash_attention
 
 I also add support for auto-gptq, bitsandbytes, peft and exllamav2 in lm-evaluation-harness !
 For example, The 70B [`LLama2-70B-chat-2.55bpw-h6-exl2`](https://huggingface.co/turboderp/LLama2-70B-chat-2.55bpw-h6-exl2) only need 24~25 VRAM to load. 

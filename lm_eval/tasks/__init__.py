@@ -136,6 +136,8 @@ TASK_REGISTRY = {
     "triviaqa": triviaqa.TriviaQA,
     "arc_easy": arc.ARCEasy,
     "arc_challenge": arc.ARCChallenge,
+    "arc_small": arc.ARCSmall,
+    "truthfulqa_small": truthfulqa.TruthfulQAMultipleChoiceSmall,
     # "quac": quac.QuAC, # not implemented yet
     "logiqa": logiqa.LogiQA,
     "hellaswag": hellaswag.HellaSwag,
