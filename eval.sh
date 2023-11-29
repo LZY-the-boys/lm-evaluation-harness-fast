@@ -13,7 +13,7 @@ if [ -z "$out_dir" ]; then
     exit 1
 fi
 
-cd $home/lm-evaluation-harness-leaderboard
+cd $LZY_HOME/lm-evaluation-harness-leaderboard
 
 function eval_single() {
 # args: peft task
