@@ -22,3 +22,4 @@ MODEL_REGISTRY = {
 
 def get_model(model_name):
     return MODEL_REGISTRY[model_name]
+
