@@ -61,7 +61,7 @@ class HFLM(BaseLM):
         batch_size=1,
         max_length=None,
         # load_in_8bit: Optional[bool] = False,
-        trust_remote_code: Optional[bool] = False,
+        trust_remote_code: Optional[bool] = True,
         dtype: Optional[Union[str, torch.dtype]]="auto",
         tensor_parallel=False, # tensor parallel
         peft: Optional[str] = None,
@@ -225,7 +225,7 @@ class HFLM(BaseLM):
         if eos_token_id is not None:
             generation_kwargs['eos_token_id'] = eos_token_id
             generation_kwargs['pad_token_id'] = eos_token_id # setting eos_token_id as pad token
-        return self.gpt2.generate(context, **generation_kwargs)
+        return self.gpt2.generate(input_ids=context, **generation_kwargs)
 
     # multiple process 注意这里是需要保持顺序的
     def loglikelihood(self, requests):

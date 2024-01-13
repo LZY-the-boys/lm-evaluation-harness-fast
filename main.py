@@ -88,14 +88,14 @@ def main():
 
 
 if __name__ == "__main__":
-    # try:
-    main()
-    # except:
-    #     import sys,pdb,bdb
-    #     type, value, tb = sys.exc_info()
-    #     if type == bdb.BdbQuit:
-    #         exit()
-    #     print(type,value)
-    #     pdb.post_mmortem(tb)
+    try:
+        main()
+    except:
+        import sys,pdb,bdb
+        type, value, tb = sys.exc_info()
+        if type == bdb.BdbQuit:
+            exit()
+        print(type,value)
+        pdb.post_mmortem(tb)
     
     
