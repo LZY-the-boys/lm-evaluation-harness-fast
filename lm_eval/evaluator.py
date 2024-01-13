@@ -65,7 +65,11 @@ def simple_evaluate(
     """
     random.seed(1234)
     np.random.seed(1234)
-
+    torch.manual_seed(1234)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(1234)
+        torch.cuda.manual_seed_all(1234)
+    
     assert tasks != [], "No tasks specified"
     task_dict = lm_eval.tasks.get_task_dict(tasks)
     task_statistics = lm_eval.tasks.get_task_statistics(task_dict)

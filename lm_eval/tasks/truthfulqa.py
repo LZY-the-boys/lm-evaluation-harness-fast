@@ -415,3 +415,8 @@ class TruthfulQAGeneration(Task):
             aggregator.add_scores(scorer.score(ref, pred))
         result = aggregator.aggregate()
         return {type: result[type].mid.fmeasure * 100 for type in rouge_types}
+
+class TruthfulQAMultipleChoiceSmall(TruthfulQAMultipleChoice):
+    VERSION = 1
+    DATASET_PATH = "/home/lzy/lora2LORA/dataset/small_truthfulqa_test.json"
+    DATASET_NAME = "generation"
