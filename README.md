@@ -1,5 +1,7 @@
 # lm-evaluation-harness Speedup
 
+> 2025.03. Update: you can use https://github.com/huggingface/lighteval instead, thanks for the awesome work from huggingface !
+
 The `lm-evaluation-harness` is very good and adopted in hotest leaderboard: [huggingface openllmleaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), 
 but the [version](https://github.com/EleutherAI/lm-evaluation-harness/tree/b281b0921b636bc36ad05c0b0b0763bd6dd43463) huggingface used is very slow in terms of loading model,tokenize prompt and inference only on a single card.
 In my test, the lastest lm-evaluation-harness version (`bigrefactor` branch) cannot reproduce huggingface openllmleaderboard result.
